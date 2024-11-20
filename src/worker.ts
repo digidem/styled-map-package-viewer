@@ -2,11 +2,7 @@
 // @ts-ignore
 import { Readable } from 'readable-stream'
 import SmpReader from 'styled-map-package/reader'
-import { promisify } from 'util'
 import { Reader, fromReader } from 'yauzl-promise'
-import zlib from 'zlib'
-
-const gunzipAsync = promisify(zlib.gunzip)
 
 addEventListener(
   'message',
@@ -30,16 +26,17 @@ addEventListener(
       try {
         const { stream, contentEncoding, contentLength } =
           await reader.getResource(url)
-        let buffer = Buffer.alloc(contentLength)
+        let buffer = new ArrayBuffer(contentLength)
+        const uint8 = new Uint8Array(buffer)
         let offset = 0
         for await (const chunk of stream) {
-          buffer.set(chunk, offset)
+          uint8.set(chunk, offset)
           offset += chunk.length
         }
         if (contentEncoding === 'gzip') {
-          buffer = await gunzipAsync(buffer)
+          buffer = await gunzip(buffer)
         }
-        postMessage({ id: event.data.id, data: buffer.buffer }, [buffer.buffer])
+        postMessage({ id: event.data.id, data: buffer }, [buffer])
       } catch (error: any) {
         postMessage({ id: event.data.id, error: error.message })
       }
@@ -140,4 +137,23 @@ export function fromWebReadableStream(
   )
 
   return readable
+}
+
+async function gunzip(inputBuffer: ArrayBuffer): Promise<ArrayBuffer> {
+  // Create a DecompressionStream instance for gzip
+  const decompressionStream = new DecompressionStream('gzip')
+
+  // Convert the input ArrayBuffer to a ReadableStream
+  const inputStream = new Response(inputBuffer)
+    .body as ReadableStream<Uint8Array>
+
+  // Pipe the input stream through the decompression stream
+  const decompressedStream = inputStream.pipeThrough(decompressionStream)
+
+  // Read the decompressed stream into a new ArrayBuffer
+  const decompressedArrayBuffer = await new Response(
+    decompressedStream,
+  ).arrayBuffer()
+
+  return decompressedArrayBuffer
 }
