@@ -17,13 +17,25 @@ button?.addEventListener('click', async (ev) => {
 input?.addEventListener('change', async (e) => {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (!file || !file.name.endsWith('.smp')) return
+  setInProgress(true)
   initializeMap(file)
 })
 
-input?.removeAttribute('disabled')
-spinner?.classList.add('hidden')
-button?.classList.remove('hidden')
-button?.removeAttribute('disabled')
+setInProgress(false)
+
+function setInProgress(inProgress: boolean) {
+  if (inProgress) {
+    input?.setAttribute('disabled', 'true')
+    button?.setAttribute('disabled', 'true')
+    spinner?.classList.remove('hidden')
+    button?.classList.add('hidden')
+  } else {
+    input?.removeAttribute('disabled')
+    spinner?.classList.add('hidden')
+    button?.classList.remove('hidden')
+    button?.removeAttribute('disabled')
+  }
+}
 
 // Defer map load so it doesn't block the UI
 const maplibrePromise = pEvent(window, 'load').then(() => import('maplibre-gl'))
@@ -36,8 +48,11 @@ async function initializeMap(file: File) {
   const map = await mapPromise
   maplibre.addProtocol('smp', createProtocolHandler(file))
   map.getContainer().style.display = 'block'
+  map.getContainer().style.visibility = 'hidden'
   map.setStyle('smp://maps.v1/style.json')
   map.on('styledata', (ev) => {
+    map.getContainer().style.visibility = 'visible'
+    setInProgress(false)
     // @ts-ignore
     const bounds = ev.style?.stylesheet?.metadata?.['smp:bounds']
     if (!bounds) return
@@ -56,6 +71,7 @@ async function initializeMap(file: File) {
         'line-width': 3,
       },
     })
+    console.log(bounds, map.getBounds())
     map.fitBounds(bounds, { duration: 0 })
   })
 }
