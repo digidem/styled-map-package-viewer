@@ -45,8 +45,11 @@ addEventListener(
   { once: true },
 )
 
+const CACHE_CHUNK_SIZE = 0xffff
+
 class FileReader extends Reader {
   #file
+  #cached: { start: number; buf: ArrayBuffer } | null = null
 
   constructor(file: File) {
     super()
@@ -59,8 +62,21 @@ class FileReader extends Reader {
   }
 
   async _read(start: number, length: number): Promise<Buffer> {
-    const blob = this.#file.slice(start, start + length)
-    return Buffer.from(await blob.arrayBuffer())
+    if (
+      this.#cached &&
+      this.#cached.start <= start &&
+      start + length <= this.#cached.start + this.#cached.buf.byteLength
+    ) {
+      const offset = start - this.#cached.start
+      return Buffer.from(this.#cached.buf, offset, length)
+    }
+    const blob = this.#file.slice(
+      start,
+      start + Math.max(CACHE_CHUNK_SIZE, length),
+    )
+    const buf = await blob.arrayBuffer()
+    this.#cached = { start, buf }
+    return Buffer.from(buf, 0, length)
   }
 }
 
